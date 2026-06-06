@@ -1,8 +1,3 @@
--- ============================================================
---  WisataKu — DATABASE LENGKAP
---  Tabel: 6 | Complex Query: 3 | View: 2 | Fungsi: 2 | Trigger: 2
--- ============================================================
-
 CREATE DATABASE IF NOT EXISTS tour_travel
     CHARACTER SET utf8mb4
     COLLATE utf8mb4_unicode_ci;
@@ -17,9 +12,6 @@ DROP TABLE IF EXISTS pengguna;
 DROP TABLE IF EXISTS kategori;
 SET FOREIGN_KEY_CHECKS = 1;
 
--- ============================================================
--- TABEL 1: kategori
--- ============================================================
 CREATE TABLE kategori (
     id          INT AUTO_INCREMENT PRIMARY KEY,
     nama        VARCHAR(100) NOT NULL,
@@ -27,9 +19,6 @@ CREATE TABLE kategori (
     dibuat_pada TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- ============================================================
--- TABEL 2: pengguna
--- ============================================================
 CREATE TABLE pengguna (
     id          INT AUTO_INCREMENT PRIMARY KEY,
     nama        VARCHAR(150) NOT NULL,
@@ -40,9 +29,6 @@ CREATE TABLE pengguna (
     dibuat_pada TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- ============================================================
--- TABEL 3: paket_wisata
--- ============================================================
 CREATE TABLE paket_wisata (
     id           INT AUTO_INCREMENT PRIMARY KEY,
     kategori_id  INT NOT NULL,
@@ -58,9 +44,6 @@ CREATE TABLE paket_wisata (
         REFERENCES kategori(id) ON DELETE RESTRICT
 );
 
--- ============================================================
--- TABEL 4: pemesanan
--- ============================================================
 CREATE TABLE pemesanan (
     id                INT AUTO_INCREMENT PRIMARY KEY,
     pengguna_id       INT NOT NULL,
@@ -77,9 +60,6 @@ CREATE TABLE pemesanan (
         REFERENCES paket_wisata(id) ON DELETE RESTRICT
 );
 
--- ============================================================
--- TABEL 5: pembayaran
--- ============================================================
 CREATE TABLE pembayaran (
     id            INT AUTO_INCREMENT PRIMARY KEY,
     pemesanan_id  INT NOT NULL UNIQUE,
@@ -92,9 +72,6 @@ CREATE TABLE pembayaran (
         REFERENCES pemesanan(id) ON DELETE CASCADE
 );
 
--- ============================================================
--- TABEL 6: ulasan
--- ============================================================
 CREATE TABLE ulasan (
     id           INT AUTO_INCREMENT PRIMARY KEY,
     pengguna_id  INT NOT NULL,
@@ -108,9 +85,6 @@ CREATE TABLE ulasan (
     CONSTRAINT fk_ulasan_pemesanan FOREIGN KEY (pemesanan_id) REFERENCES pemesanan(id)    ON DELETE CASCADE
 );
 
--- ============================================================
--- DATA AWAL
--- ============================================================
 INSERT INTO kategori (nama, ikon) VALUES
 ('Wisata Alam',   'mountain'),
 ('Wisata Budaya', 'museum'),
@@ -153,11 +127,6 @@ INSERT INTO ulasan (pengguna_id, paket_id, pemesanan_id, rating, komentar) VALUE
 (3, 3, 2, 4, 'Perjalanan menyenangkan, Jogja selalu bikin kangen. Candi Prambanan indah sekali!'),
 (3, 4, 5, 5, 'Trekking Rinjani pengalaman luar biasa! Worth every penny. Highly recommended!');
 
--- ============================================================
--- VIEW 1: v_paket_populer
--- Menampilkan paket wisata lengkap dengan statistik
--- (rata-rata rating, total pemesanan, total pendapatan)
--- ============================================================
 CREATE OR REPLACE VIEW v_paket_populer AS
 SELECT
     pw.id,
@@ -181,11 +150,6 @@ GROUP BY
     pw.id, pw.judul, pw.destinasi, pw.harga,
     pw.durasi_hari, pw.kapasitas, pw.status, k.nama;
 
--- ============================================================
--- VIEW 2: v_riwayat_pemesanan
--- Tampilan lengkap riwayat pemesanan beserta status pembayaran
--- (berguna untuk halaman "Daftar Pemesanan" admin)
--- ============================================================
 CREATE OR REPLACE VIEW v_riwayat_pemesanan AS
 SELECT
     pe.id                   AS pemesanan_id,
@@ -217,12 +181,6 @@ JOIN  kategori k        ON k.id  = pw.kategori_id
 LEFT JOIN pembayaran py ON py.pemesanan_id = pe.id
 LEFT JOIN ulasan u      ON u.pemesanan_id  = pe.id;
 
--- ============================================================
--- FUNGSI 1: hitung_total_harga
--- Menghitung total harga = harga_satuan × jumlah_peserta
--- Input : harga per orang, jumlah peserta
--- Output: total harga (DECIMAL)
--- ============================================================
 DELIMITER $$
 CREATE FUNCTION hitung_total_harga(
     p_harga_satuan  DECIMAL(12,2),
@@ -238,12 +196,6 @@ BEGIN
 END$$
 DELIMITER ;
 
--- ============================================================
--- FUNGSI 2: get_rata_rating
--- Mengambil rata-rata rating sebuah paket wisata.
--- Input : paket_id
--- Output: rata-rata rating (DECIMAL), 0.00 jika belum ada ulasan
--- ============================================================
 DELIMITER $$
 CREATE FUNCTION get_rata_rating(p_paket_id INT)
 RETURNS DECIMAL(3,2)
@@ -259,12 +211,6 @@ BEGIN
 END$$
 DELIMITER ;
 
--- ============================================================
--- TRIGGER 1: trg_after_pemesanan_insert
--- Setelah ada pemesanan baru masuk:
--- Cek apakah total peserta sudah mencapai kapasitas paket,
--- jika iya maka ubah status paket menjadi 'penuh' otomatis.
--- ============================================================
 DELIMITER $$
 CREATE TRIGGER trg_after_pemesanan_insert
 AFTER INSERT ON pemesanan
@@ -273,7 +219,6 @@ BEGIN
     DECLARE v_total_peserta INT;
     DECLARE v_kapasitas     INT;
 
-    -- Hitung total peserta aktif untuk paket ini
     SELECT COALESCE(SUM(jumlah_peserta), 0)
     INTO   v_total_peserta
     FROM   pemesanan
@@ -281,12 +226,10 @@ BEGIN
       AND  tanggal_berangkat = NEW.tanggal_berangkat
       AND  status NOT IN ('dibatalkan');
 
-    -- Ambil kapasitas paket
     SELECT kapasitas INTO v_kapasitas
     FROM   paket_wisata
     WHERE  id = NEW.paket_id;
 
-    -- Tandai penuh jika kapasitas tercapai
     IF v_total_peserta >= v_kapasitas THEN
         UPDATE paket_wisata
         SET    status = 'penuh'
@@ -295,14 +238,6 @@ BEGIN
 END$$
 DELIMITER ;
 
--- ============================================================
--- TRIGGER 2: trg_after_pemesanan_update
--- Setelah status pemesanan diperbarui:
--- Jika pemesanan DIBATALKAN → periksa ulang kapasitas,
--- jika ada slot kosong maka kembalikan status paket ke 'aktif'.
--- Jika pemesanan DIKONFIRMASI → buat record pembayaran otomatis
--- jika belum ada.
--- ============================================================
 DELIMITER $$
 CREATE TRIGGER trg_after_pemesanan_update
 AFTER UPDATE ON pemesanan
@@ -311,10 +246,8 @@ BEGIN
     DECLARE v_total_peserta INT;
     DECLARE v_kapasitas     INT;
 
-    -- Jika status berubah menjadi 'dibatalkan'
     IF NEW.status = 'dibatalkan' AND OLD.status != 'dibatalkan' THEN
 
-        -- Hitung ulang peserta aktif
         SELECT COALESCE(SUM(jumlah_peserta), 0)
         INTO   v_total_peserta
         FROM   pemesanan
@@ -334,8 +267,6 @@ BEGIN
 
     END IF;
 
-    -- Jika status berubah menjadi 'dikonfirmasi'
-    -- buat record pembayaran otomatis jika belum ada
     IF NEW.status = 'dikonfirmasi' AND OLD.status = 'menunggu' THEN
         IF NOT EXISTS (
             SELECT 1 FROM pembayaran WHERE pemesanan_id = NEW.id
